@@ -7,6 +7,7 @@ import {rimraf} from "rimraf";
 import axios from "axios";
 import {x as extractTar} from "tar";
 import {retry} from "@lodestar/utils";
+import progressStream from "progress-stream";
 
 export const defaultSpecTestsRepoUrl = "https://github.com/ethereum/consensus-spec-tests";
 
@@ -15,9 +16,9 @@ const logEmpty = (): void => {};
 export type DownloadTestsOptions = {
   specVersion: string;
   outputDir: string;
-  /** Root Github URL `https://github.com/ethereum/consensus-spec-tests` */
+    /** Root Github URL `https://github.com/ethereum/consensus-spec-tests` */
   specTestsRepoUrl: string;
-  /** Release files names to download without prefix `["general", "mainnet", "minimal"]` */
+    /** Release files names to download without prefix `["general", "mainnet", "minimal"]` */
   testsToDownload: string[];
 };
 
@@ -74,13 +75,29 @@ export async function downloadGenericSpecTests<TestNames extends string>(
             timeout: 30 * 60 * 1000,
           });
 
-          const totalSize = headers["content-length"] as string;
+          const totalSize = parseInt(headers["content-length"], 10);
           log(`Downloading ${url} - ${totalSize} bytes`);
 
-          // extract tar into output directory
-          await promisify(stream.pipeline)(data, extractTar({cwd: outputDir}));
+          const progress = progressStream({ length: totalSize, time: 100 });
+          const barLength = 40; // Length of the progress bar
+          let lastPercentage = 0;
 
-          log(`Downloaded  ${url}`);
+          progress.on('progress', (progressData) => {
+            const currentPercentage = Math.floor(progressData.percentage);
+          
+            if (currentPercentage > lastPercentage) {
+              lastPercentage = currentPercentage;
+              const filledLength = Math.round(barLength * currentPercentage / 100);
+              const bar = '#'.repeat(filledLength) + '-'.repeat(barLength - filledLength);
+              // Move the cursor to the beginning of the line and overwrite it
+              process.stdout.write(`\r[${bar}] ${currentPercentage}% (${progressData.transferred} bytes)`);
+            }
+          });
+
+          // Use pipeline to handle the stream and extract the tar
+          await promisify(stream.pipeline)(data.pipe(progress), extractTar({ cwd: outputDir }));
+          console.log(); // Move to the next line after the download is complete
+          log(`Downloaded ${url}`);
         },
         {
           retries: 3,

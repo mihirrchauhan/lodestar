@@ -89,5 +89,8 @@
     "loupe": "^2.3.6",
     "vite": "^5.3.4",
     "testcontainers/**/nan": "^2.19.0"
+  },
+  "dependencies": {
+    "progress-stream": "^2.0.0"
   }
 }
